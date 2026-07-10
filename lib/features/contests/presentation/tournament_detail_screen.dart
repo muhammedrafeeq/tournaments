@@ -649,8 +649,16 @@ class _StandingsTab extends ConsumerWidget {
                       ? row.points.toString().replaceAll(RegExp(r'\.0$'), '')
                       : '${row.points.toInt()}';
 
+                  final medal = idx == 0 ? '🥇' : idx == 1 ? '🥈' : idx == 2 ? '🥉' : null;
+
                   final cells = [
-                    DataCell(Center(child: Text('${idx + 1}', style: AppTextStyles.labelSmall.copyWith(color: idx == 0 ? AppColors.primary : AppColors.textSecondary)))),
+                    DataCell(Center(
+                      child: medal != null
+                          ? Text(medal, style: const TextStyle(fontSize: 14))
+                          : Text('${idx + 1}',
+                              style: AppTextStyles.labelSmall
+                                  .copyWith(color: AppColors.textSecondary)),
+                    )),
                     DataCell(
                       Row(
                         children: [
@@ -760,8 +768,7 @@ class _MatchesTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final matchesAsync =
-        ref.watch(tournamentMatchesStreamProvider(id));
+    final matchesAsync = ref.watch(tournamentMatchesStreamProvider(id));
 
     return matchesAsync.when(
       loading: () => const Center(
@@ -783,20 +790,17 @@ class _MatchesTab extends ConsumerWidget {
                 const SizedBox(height: 12),
                 Text('No matches scheduled yet',
                     style: AppTextStyles.headingSmall
-                        .copyWith(
-                            color: AppColors.textTertiary)),
+                        .copyWith(color: AppColors.textTertiary)),
                 const SizedBox(height: 6),
                 Text('Tap "Score Match" to add one',
                     style: AppTextStyles.bodySmall
-                        .copyWith(
-                            color: AppColors.textTertiary)),
+                        .copyWith(color: AppColors.textTertiary)),
               ],
             ),
           );
         }
         return ListView.builder(
-          padding:
-              const EdgeInsets.fromLTRB(20, 16, 20, 100),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
           itemCount: matches.length,
           itemBuilder: (ctx, i) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -809,8 +813,7 @@ class _MatchesTab extends ConsumerWidget {
                   isIndividual: isIndividual,
                   onTap: () => context.push(
                     Uri(
-                      path:
-                          '/tournaments/$id/matches/${matches[i].id}/score',
+                      path: '/tournaments/$id/matches/${matches[i].id}',
                       queryParameters: {
                         'sport': sport,
                         'home': matches[i].homeTeamName ?? 'Home',
@@ -1027,6 +1030,7 @@ class _TeamsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isIndividual = tournament.type == 'individual';
     final teamsAsync = ref.watch(tournamentTeamsProvider(tournament.id));
+    final liveIdsAsync = ref.watch(liveTeamIdsProvider);
 
     return teamsAsync.when(
       loading: () => const Center(
@@ -1087,6 +1091,7 @@ class _TeamsTab extends ConsumerWidget {
                     team: teams[i],
                     index: i,
                     isIndividual: isIndividual,
+                    isInLiveTournament: liveIdsAsync.valueOrNull?.contains(teams[i].id) ?? false,
                   )
                       .animate()
                       .fadeIn(
@@ -1106,7 +1111,13 @@ class _TournamentTeamCard extends ConsumerStatefulWidget {
   final Team team;
   final int index;
   final bool isIndividual;
-  const _TournamentTeamCard({required this.team, required this.index, required this.isIndividual});
+  final bool isInLiveTournament;
+  const _TournamentTeamCard({
+    required this.team,
+    required this.index,
+    required this.isIndividual,
+    this.isInLiveTournament = false,
+  });
 
   @override
   ConsumerState<_TournamentTeamCard> createState() =>
@@ -1162,7 +1173,25 @@ class _TournamentTeamCardState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.team.name, style: AppTextStyles.headingSmall),
+                  Row(
+                    children: [
+                      Expanded(child: Text(widget.team.name, style: AppTextStyles.headingSmall)),
+                      if (widget.isInLiveTournament) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.danger.withAlpha(30),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: AppColors.danger.withAlpha(100)),
+                          ),
+                          child: Text('LIVE',
+                              style: AppTextStyles.labelSmall
+                                  .copyWith(color: AppColors.danger, fontSize: 8)),
+                        ),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 3),
                   Text(widget.team.sport.toUpperCase(),
                       style: AppTextStyles.bodySmall
@@ -1353,6 +1382,12 @@ class _BracketTab extends ConsumerWidget {
   final String tournamentId;
   const _BracketTab({required this.tournamentId});
 
+  static const double _cardH = 76;
+  static const double _cardW = 164;
+  static const double _colGap = 52;
+  static const double _colStride = _cardW + _colGap;
+  static const double _headerH = 34;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final matchesAsync = ref.watch(tournamentMatchesStreamProvider(tournamentId));
@@ -1365,7 +1400,8 @@ class _BracketTab extends ConsumerWidget {
         child: Text('Could not load bracket', style: AppTextStyles.bodyMedium),
       ),
       data: (matches) {
-        final bracketMatches = matches.where((m) => m.metadata.containsKey('round')).toList();
+        final bracketMatches =
+            matches.where((m) => m.metadata.containsKey('round')).toList();
 
         if (bracketMatches.isEmpty) {
           return Center(
@@ -1379,100 +1415,257 @@ class _BracketTab extends ConsumerWidget {
                     style: AppTextStyles.headingSmall
                         .copyWith(color: AppColors.textTertiary)),
                 const SizedBox(height: 8),
-                Text('Available after group stage',
+                Text('Available after the bracket draw',
                     style: AppTextStyles.bodySmall),
               ],
             ),
           );
         }
 
-        // Group by round
         final roundMap = <String, List<Match>>{};
         for (final m in bracketMatches) {
           final round = m.metadata['round']?.toString() ?? 'Round';
           roundMap.putIfAbsent(round, () => []).add(m);
         }
         final rounds = roundMap.keys.toList()..sort();
+        final roundLists = rounds.map((r) => roundMap[r]!).toList();
+
+        final int maxMatches =
+            roundLists.isEmpty ? 1 : roundLists[0].length;
+        final double bodyH = maxMatches * (_cardH + 12) - 12;
+        final double totalW =
+            roundLists.length * _colStride - _colGap;
 
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: rounds.map((round) {
-              final roundMatches = roundMap[round]!;
-              return Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: SizedBox(
-                  width: 180,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          child: SizedBox(
+            width: totalW,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Round headers
+                Row(
+                  children: rounds.asMap().entries.map((e) {
+                    final isLast = e.key == rounds.length - 1;
+                    return SizedBox(
+                      width: isLast ? _cardW : _colStride,
+                      child: Container(
+                        height: _headerH,
+                        margin: EdgeInsets.only(right: isLast ? 0 : _colGap),
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: AppColors.primarySurface,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: AppColors.glassBorder),
                         ),
-                        child: Text(
-                          round,
-                          style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
-                          textAlign: TextAlign.center,
+                        child: Text(e.value,
+                            style: AppTextStyles.labelSmall
+                                .copyWith(color: AppColors.primary)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                // Bracket body: cards + connector lines
+                SizedBox(
+                  height: bodyH,
+                  width: totalW,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _BracketConnectorPainter(
+                            roundLists: roundLists,
+                            cardH: _cardH,
+                            cardW: _cardW,
+                            colStride: _colStride,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      ...roundMatches.map((m) {
-                        final home = m.homeTeamName ?? 'TBD';
-                        final away = m.awayTeamName ?? 'TBD';
-                        final isCompleted = m.status == 'completed';
-                        final scoreText = isCompleted
-                            ? '${m.homeScore ?? 0} – ${m.awayScore ?? 0}'
-                            : 'vs';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgCard,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.stroke),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(home,
-                                    style: AppTextStyles.labelSmall,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  child: Text(
-                                    scoreText,
-                                    style: AppTextStyles.labelSmall.copyWith(
-                                      color: isCompleted ? AppColors.primary : AppColors.textTertiary,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                Text(away,
-                                    style: AppTextStyles.labelSmall,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.right),
-                              ],
-                            ),
-                          ),
-                        );
+                      ...roundLists.asMap().entries.expand((rEntry) {
+                        final rIdx = rEntry.key;
+                        final rMatches = rEntry.value;
+                        final slotH = bodyH / rMatches.length;
+                        return rMatches.asMap().entries.map((mEntry) {
+                          final mIdx = mEntry.key;
+                          final match = mEntry.value;
+                          final x = rIdx * _colStride;
+                          final y = slotH * mIdx + (slotH - _cardH) / 2;
+                          return Positioned(
+                            left: x,
+                            top: y,
+                            width: _cardW,
+                            height: _cardH,
+                            child: _BracketCard(match: match),
+                          );
+                        });
                       }),
                     ],
                   ),
                 ),
-              );
-            }).toList(),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+class _BracketConnectorPainter extends CustomPainter {
+  final List<List<Match>> roundLists;
+  final double cardH;
+  final double cardW;
+  final double colStride;
+
+  const _BracketConnectorPainter({
+    required this.roundLists,
+    required this.cardH,
+    required this.cardW,
+    required this.colStride,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (roundLists.length < 2) return;
+    final paint = Paint()
+      ..color = AppColors.stroke
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    for (int r = 0; r < roundLists.length - 1; r++) {
+      final curMatches = roundLists[r];
+      final nextMatches = roundLists[r + 1];
+
+      final slotCur = size.height / curMatches.length;
+      final slotNext = size.height / nextMatches.length;
+      final xRight = colStride * r + cardW;
+      final xLeft = colStride * (r + 1);
+      final xMid = (xRight + xLeft) / 2;
+
+      for (int i = 0; i < curMatches.length; i++) {
+        final yCur = slotCur * (i + 0.5);
+        final jNext = i ~/ 2;
+        if (jNext >= nextMatches.length) continue;
+        final yNext = slotNext * (jNext + 0.5);
+
+        final path = Path()
+          ..moveTo(xRight, yCur)
+          ..lineTo(xMid, yCur)
+          ..lineTo(xMid, yNext)
+          ..lineTo(xLeft, yNext);
+        canvas.drawPath(path, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BracketConnectorPainter old) =>
+      old.roundLists != roundLists;
+}
+
+class _BracketCard extends StatelessWidget {
+  final Match match;
+  const _BracketCard({required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    final home = match.homeTeamName ?? 'TBD';
+    final away = match.awayTeamName ?? 'TBD';
+    final isCompleted = match.status == 'completed';
+    final isLive = match.status == 'live';
+    final homeScore = match.homeScore ?? 0;
+    final awayScore = match.awayScore ?? 0;
+    final homeWon = isCompleted && homeScore > awayScore;
+    final awayWon = isCompleted && awayScore > homeScore;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isLive
+              ? AppColors.danger.withAlpha(150)
+              : AppColors.stroke,
+        ),
+      ),
+      child: Column(
+        children: [
+          _BracketTeamRow(
+            name: home,
+            score: (isCompleted || isLive) ? homeScore : null,
+            isWinner: homeWon,
+          ),
+          Divider(height: 1, thickness: 1, color: AppColors.stroke.withAlpha(80)),
+          _BracketTeamRow(
+            name: away,
+            score: (isCompleted || isLive) ? awayScore : null,
+            isWinner: awayWon,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BracketTeamRow extends StatelessWidget {
+  final String name;
+  final int? score;
+  final bool isWinner;
+
+  const _BracketTeamRow({
+    required this.name,
+    this.score,
+    this.isWinner = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                name,
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: isWinner
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
+                  fontWeight:
+                      isWinner ? FontWeight.w700 : FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (score != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isWinner
+                      ? AppColors.primarySurface
+                      : AppColors.bgElevated,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '$score',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: isWinner
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

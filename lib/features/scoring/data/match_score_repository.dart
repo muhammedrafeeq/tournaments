@@ -49,6 +49,7 @@ class MatchScoreRepository {
         .from('matches')
         .stream(primaryKey: ['id'])
         .eq('id', matchId)
-        .expand((rows) => rows.isNotEmpty ? [Match.fromJson(rows.first)] : const []);
+        .expand(
+            (rows) => rows.isNotEmpty ? [Match.fromJson(rows.first)] : const []);
   }
 }

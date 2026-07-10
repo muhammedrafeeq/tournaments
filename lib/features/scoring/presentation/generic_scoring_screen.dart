@@ -31,9 +31,8 @@ class _GenericScoringScreenState extends ConsumerState<GenericScoringScreen> {
   bool _isInitialized = false;
 
   // Rows: each row is [aPoints, bPoints] per round
-  final List<List<int?>> _rounds = [
-    [null, null]
-  ];
+  final List<List<int?>> _rounds = [[null, null]];
+  final List<List<List<int?>>> _history = [];
 
   int? _editingRow;
   int? _editingCol; // 0=A, 1=B
@@ -104,9 +103,25 @@ class _GenericScoringScreenState extends ConsumerState<GenericScoringScreen> {
     });
   }
 
+  void _saveHistory() {
+    _history.add(_rounds.map((r) => List<int?>.from(r)).toList());
+    if (_history.length > 10) _history.removeAt(0);
+  }
+
+  void _undo() {
+    if (_history.isEmpty) return;
+    final prev = _history.removeLast();
+    setState(() {
+      _rounds.clear();
+      _rounds.addAll(prev);
+    });
+    _syncToSupabase();
+  }
+
   void _commitEdit() {
     if (_editingRow == null || _editingCol == null) return;
     final val = int.tryParse(_ctrl.text.trim());
+    _saveHistory();
     setState(() {
       _rounds[_editingRow!][_editingCol!] = val;
       _editingRow = null;
@@ -118,6 +133,7 @@ class _GenericScoringScreenState extends ConsumerState<GenericScoringScreen> {
 
   void _addRound() {
     if (_matchOver) return;
+    _saveHistory();
     setState(() => _rounds.add([null, null]));
     _syncToSupabase();
   }
@@ -185,6 +201,27 @@ class _GenericScoringScreenState extends ConsumerState<GenericScoringScreen> {
                 ),
               ),
               const Spacer(),
+              if (_history.isNotEmpty)
+                GestureDetector(
+                  onTap: _undo,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgCard,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.stroke),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.undo_rounded, size: 14, color: AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        Text('Undo', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ),
+              if (_history.isNotEmpty) const SizedBox(width: 8),
               _SportTag(label: widget.sport.toUpperCase()),
             ],
           ),

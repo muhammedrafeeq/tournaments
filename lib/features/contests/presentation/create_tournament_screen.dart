@@ -12,6 +12,7 @@ import '../../../core/widgets/glass_card.dart';
 import '../../../core/widgets/hyper_grid_background.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/top_bar.dart';
+import '../data/tournament_template_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Screen
@@ -156,6 +157,95 @@ class _CreateTournamentScreenState
       backgroundColor: AppColors.bgCard,
       behavior: SnackBarBehavior.floating,
     ));
+  }
+
+  // ── Templates ──────────────────────────────────────────────────────────────
+
+  final _templateService = TournamentTemplateService();
+
+  void _applyTemplate(TournamentTemplate t) {
+    setState(() {
+      _selectedSport = t.sport;
+      _tournamentType = t.type;
+      _drawMethod = t.drawMethod;
+      _drawCompleted = false;
+      _drawnOrder = [];
+      _selectedTeamIds.clear();
+      _selectedPlayerIds.clear();
+      _selectedTeamNames.clear();
+      _selectedPlayerNames.clear();
+      _selectedPlayerProfileIds.clear();
+    });
+    _showSnack('Template "${t.name}" applied');
+  }
+
+  Future<void> _showLoadTemplateSheet() async {
+    final ctx = context;
+    final templates = await _templateService.loadAll();
+    if (!mounted) return;
+    if (templates.isEmpty) {
+      _showSnack('No saved templates yet');
+      return;
+    }
+    // ignore: use_build_context_synchronously
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Saved Templates', style: AppTextStyles.headingSmall),
+              const SizedBox(height: 16),
+              ...templates.asMap().entries.map((e) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(e.value.name, style: AppTextStyles.labelMedium),
+                    subtitle: Text(
+                      '${e.value.sport.toUpperCase()} · ${e.value.type}',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded,
+                          color: AppColors.danger, size: 18),
+                      onPressed: () async {
+                        await _templateService.delete(e.key);
+                        if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                      },
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _applyTemplate(e.value);
+                    },
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveAsTemplate() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty || _selectedSport.isEmpty) {
+      _showSnack('Fill in name and sport first');
+      return;
+    }
+    final template = TournamentTemplate(
+      name: name,
+      sport: _selectedSport,
+      type: _tournamentType,
+      drawMethod: _drawMethod,
+      maxTeams: _selectionCount,
+      isPublic: false,
+    );
+    await _templateService.save(template);
+    if (mounted) _showSnack('Template saved!');
   }
 
   Future<void> _handlePublish() async {
@@ -362,6 +452,54 @@ class _CreateTournamentScreenState
               title: 'Create Tournament',
               subtitle: 'Step ${_step + 1} of $_totalSteps · ${_stepTitles[_step]}',
               showBack: true,
+              actions: [
+                if (_step == 0)
+                  GestureDetector(
+                    onTap: _showLoadTemplateSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgCard,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.stroke),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.bookmark_outline_rounded,
+                              size: 14, color: AppColors.primary),
+                          const SizedBox(width: 5),
+                          Text('Templates',
+                              style: AppTextStyles.labelSmall
+                                  .copyWith(color: AppColors.primary)),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_step == _totalSteps - 1)
+                  GestureDetector(
+                    onTap: _saveAsTemplate,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgCard,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.stroke),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.bookmark_add_outlined,
+                              size: 14, color: AppColors.textSecondary),
+                          const SizedBox(width: 5),
+                          Text('Save Template',
+                              style: AppTextStyles.labelSmall
+                                  .copyWith(color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
             _StepIndicator(current: _step, total: _totalSteps),
             Expanded(

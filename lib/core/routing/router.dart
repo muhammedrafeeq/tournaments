@@ -11,6 +11,7 @@ import '../../features/teams/presentation/team_detail_screen.dart';
 import '../../features/players/presentation/players_screen.dart';
 import '../../features/players/presentation/player_detail_screen.dart';
 import '../../features/contests/presentation/join_tournament_screen.dart';
+import '../../features/matches/presentation/match_detail_screen.dart';
 import '../../features/scoring/presentation/scoring_router.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../widgets/main_shell.dart';
@@ -113,9 +114,24 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
-      path: '/tournaments/:id/live/:matchId',
-      pageBuilder: (ctx, state) =>
-          _slidePage(state.pageKey, const _PlaceholderScreen(title: 'Live Match')),
+      path: '/tournaments/:id/matches/:matchId',
+      pageBuilder: (ctx, state) {
+        final tournamentId = state.pathParameters['id']!;
+        final matchId = state.pathParameters['matchId']!;
+        final sport = state.uri.queryParameters['sport'] ?? 'generic';
+        final home = state.uri.queryParameters['home'] ?? 'Home';
+        final away = state.uri.queryParameters['away'] ?? 'Away';
+        return _slidePage(
+          state.pageKey,
+          MatchDetailScreen(
+            tournamentId: tournamentId,
+            matchId: matchId,
+            sport: sport,
+            homeTeam: home,
+            awayTeam: away,
+          ),
+        );
+      },
     ),
     GoRoute(
       path: '/tournaments/:id/matches/:matchId/score',

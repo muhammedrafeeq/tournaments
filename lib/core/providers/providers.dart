@@ -114,9 +114,28 @@ final profileStatsProvider =
   );
 });
 
+// ── Live participation ─────────────────────────────────────────────────────
+
+/// Set of team IDs enrolled in any currently-live tournament.
+final liveTeamIdsProvider = FutureProvider<Set<String>>((ref) async {
+  final client = Supabase.instance.client;
+  final liveTourneys = await client
+      .from('tournaments')
+      .select('id')
+      .eq('status', 'live');
+  if ((liveTourneys as List).isEmpty) return {};
+  final ids = liveTourneys.map((e) => e['id'] as String).toList();
+  final rows = await client
+      .from('tournament_teams')
+      .select('team_id')
+      .inFilter('tournament_id', ids);
+  return (rows as List).map((e) => e['team_id'] as String).toSet();
+});
+
 // ── Match / Scoring ────────────────────────────────────────────────────────
 
 final matchStreamProvider =
     StreamProvider.family<Match, String>((ref, matchId) {
   return ref.read(matchScoreRepositoryProvider).watchMatch(matchId);
 });
+
