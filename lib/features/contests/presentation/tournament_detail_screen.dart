@@ -14,6 +14,7 @@ import '../../../core/widgets/glass_card.dart';
 import '../../../core/widgets/hyper_grid_background.dart';
 import '../../../core/widgets/app_badge.dart';
 import '../../../core/widgets/top_bar.dart';
+import '../../../core/widgets/team_logo.dart';
 
 class TournamentDetailScreen extends ConsumerStatefulWidget {
   final String id;
@@ -1735,17 +1736,22 @@ class _TeamSlot extends StatelessWidget {
     return Column(
       crossAxisAlignment: align,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.bgElevated,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: AppColors.stroke),
-          ),
-          child:
-              Icon(isIndividual ? Icons.person_rounded : Icons.shield_rounded, color: iconColor, size: 20),
-        ),
+        isIndividual
+            ? Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.bgElevated,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.stroke),
+                ),
+                child: Icon(Icons.person_rounded, color: iconColor, size: 22),
+              )
+            : TeamLogoWidget(
+                name: name,
+                color: shieldColorForName(name),
+                size: 40,
+              ),
         const SizedBox(height: 8),
         Text(
           name,
